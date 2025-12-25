@@ -2,7 +2,7 @@ import time
 import pygetwindow as gw
 import pyautogui
 import logging
-from screen_automation import KeyBind_Manager
+from screen_automation import Keybind_Manager
 from threading import Event
 import math
 
@@ -14,6 +14,9 @@ import math
 #this script resolves the issue by bounding the cursor into a circle, if it goes outside of it, it will be sent back.
 #The condition for this to happen is that the game must be the current active window and the flag must be set, using
 #a keybind
+
+    
+
 
 WindowName = "Brawlstars"
 DistanceCenter_Percentage_HeightBased = 37
@@ -45,20 +48,20 @@ class Main:
         #list of all edge coords of the circle
         self.EdgeCoords = self.CircleEdge()
     
-    def start(self):
-        KB = KeyBind_Manager()
-        KB.upload_keybind_function(self.InGame_Keybind, self.Toggle_InGame)
-        KB.upload_keybind_function(self.Set_Cursor_Center_Keybind, self.Set_Cursor_Center)
-        
+    def Start(self):
+        KB = Keybind_Manager()
+        KB.Upload_Keybind_Function(self.InGame_Keybind, self.Toggle_InGame)
+        KB.Upload_Keybind_Function(self.Set_Cursor_Center_Keybind, self.Set_Cursor_Center)
+        KB.Run_Listeners()
         
         logging.basicConfig(level=logging.INFO)
-        logging.info(f"Waiting for {self.WindowName} to start...")
+        logging.info(f"Waiting for {self.WindowName} to Start...")
 
         #waits for the window to appear
         while not self.Find_Window():
             time.sleep(0.7)
 
-        logging.info(f"{self.WindowName} detected! Monitoring started.")
+        logging.info(f"{self.WindowName} detected! Monitoring Started.")
 
         try:
             while self.Process.is_set():
@@ -74,9 +77,6 @@ class Main:
                 else:
                     logging.info(f"{self.WindowName} closed. Exiting script.")
                     self.Process.clear()
-                time.sleep(0.05)
-                
-
                 time.sleep(0.05)
         except Exception as E:
             logging.error(f"An error occurred: {E}")
@@ -102,19 +102,19 @@ class Main:
         """
         dx = x - self.Middle_X
         dy = y - self.Middle_Y
-        dist = math.sqrt(dx*dx + dy*dy)
+        Distance = math.sqrt(dx*dx + dy*dy)
 
         # if the cursor is inside the circle, exit.
-        if dist <= self.DistanceCenter:
+        if Distance <= self.DistanceCenter:
             return
 
         # if it's outside, it finds the closest coords between the cursor and the set of pixels
-        closest = min(self.EdgeCoords, key=lambda p: (p[0] - x)**2 + (p[1] - y)**2)
-        pyautogui.moveTo(closest[0], closest[1])
+        Closest = min(self.EdgeCoords, key=lambda p: (p[0] - x)**2 + (p[1] - y)**2)
+        pyautogui.moveTo(Closest[0], Closest[1])
 
     def Find_Window(self):
         #if the window is present in all windows, returns true
-        return any(title.strip() == self.WindowName for title in gw.getAllTitles())
+        return any(Title.strip() == self.WindowName for Title in gw.getAllTitles())
 
     def Toggle_InGame(self):
         #flag toggle used in keybind
@@ -129,5 +129,5 @@ class Main:
         pyautogui.moveTo(self.Middle_X, self.Middle_Y)
         
 if __name__ == "__main__":
-    main = Main(WindowName, DistanceCenter_Percentage_HeightBased)
-    main.start()
+    Main(WindowName, DistanceCenter_Percentage_HeightBased).Start()
+    
