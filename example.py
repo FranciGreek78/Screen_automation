@@ -2,100 +2,132 @@ import time
 import pygetwindow as gw
 import pyautogui
 import logging
-from screen_automation_copy import KeyBind_Manager
+from screen_automation import KeyBind_Manager
 from threading import Event
 import math
 
-import math
+#this script is used for playing a mobile game using an emulator. This game uses a joystick and this emulator is setted 
+#for replicating an invisible joystick at center, that sends the input to the real joystick at a different position.
+#the problem is that while playing, the cursor has no bound and can go anywhere, so it can be way off set and if you
+#want to direct the joystick to the opposite direction, it takes too long and makes the experience very unpleasent
 
-def circle_border_pixels(radius: int, cx: int = 0, cy: int = 0):
-    """
-    Restituisce una lista di coordinate (x, y) dei pixel sul bordo di un cerchio.
-    """
-    points = set()
-    for deg in range(360):
-        rad = math.radians(deg)
-        x = round(cx + radius * math.cos(rad))
-        y = round(cy + radius * math.sin(rad))
-        points.add((x, y))
-    return sorted(points)
+#this script resolves the issue by bounding the cursor into a circle, if it goes outside of it, it will be sent back.
+#The condition for this to happen is that the game must be the current active window and the flag must be set, using
+#a keybind
 
-def clamp_to_circle(x: int, y: int, cx: int, cy: int, radius: int, border_coords: list[tuple[int, int]]):
-    """
-    Se il punto (x, y) è fuori dal cerchio di centro (cx, cy) e raggio `radius`,
-    sposta il mouse al punto più vicino sul bordo.
-    """
-    dx = x - cx
-    dy = y - cy
-    dist = math.sqrt(dx*dx + dy*dy)
+WindowName = "Brawlstars"
+DistanceCenter_Percentage_HeightBased = 37
 
-    # se è dentro o sul bordo → non fare nulla
-    if dist <= radius:
-        return
-
-    # trova la coordinata più vicina sul bordo
-    closest = min(border_coords, key=lambda p: (p[0] - x)**2 + (p[1] - y)**2)
-    pyautogui.moveTo(closest[0], closest[1])
-
-def find_window():
-    return any(title.strip() == window_name for title in gw.getAllTitles())
-
-def InGame_Toggle():
-    if InGame.is_set():
-        InGame.clear()
-        return
-    InGame.set()
-
+class Main:
+    #flag for stopping all processes running
+    Process = Event()
+    Process.set()
+    #flag for keybind to decleare whenever the cursor must be bounded to the circle
+    InGame = Event()
+    ScreenWidth, ScreenHeight = pyautogui.size()
+    #getting middle point of the screen
+    Middle_X = int(ScreenWidth / 2)
+    Middle_Y = int(ScreenHeight / 2)
     
-def Cancel_Skill():
-    pyautogui.moveTo(middle_x, middle_y)  
+    def __init__(self, WindowName, DistanceCenter_Percentage_HeightBased, InGame_Keybind = 'v', Set_Cursor_Center_Keybind = 'middle_m'):
+        #window name that must be case sensitive, so it checks if the active window has the same name
+        self.WindowName = WindowName
+        #used for the radius of the circle, based on the percentage of the current height of the screen
+        self.DistanceCenter = DistanceCenter_Percentage_HeightBased
+        self.InGame_Keybind = InGame_Keybind
+        self.Set_Cursor_Center_Keybind = Set_Cursor_Center_Keybind
+        #radius of the circle
+        self.DistanceCenter = int(self.ScreenHeight / 100 * DistanceCenter_Percentage_HeightBased)
+        self.LeftFurther_Edge = self.Middle_X - self.DistanceCenter  
+        self.RightFurther_Edge = self.Middle_X + self.DistanceCenter  
+        self.TopFurther_Edge = self.Middle_Y - self.DistanceCenter 
+        self.BottomFurther_Edge = self.Middle_Y + self.DistanceCenter
+        #list of all edge coords of the circle
+        self.EdgeCoords = self.CircleEdge()
     
-KB = KeyBind_Manager()
+    def start(self):
+        KB = KeyBind_Manager()
+        KB.upload_keybind_function(self.InGame_Keybind, self.Toggle_InGame)
+        KB.upload_keybind_function(self.Set_Cursor_Center_Keybind, self.Set_Cursor_Center)
+        
+        
+        logging.basicConfig(level=logging.INFO)
+        logging.info(f"Waiting for {self.WindowName} to start...")
 
-window_name = "Brawlstars"
-Process = Event()
-Process.set()
-InGame = Event()
-screen_width, screen_height = pyautogui.size()
-middle_x = screen_width / 2
-middle_y = screen_height / 2
-distance_from_center = 400
-left_max_distance = middle_x - distance_from_center - 100
-right_max_distance = middle_x + distance_from_center + 100
-top_max_distance = middle_y - distance_from_center
-bottom_max_distance = middle_y + distance_from_center
+        #waits for the window to appear
+        while not self.Find_Window():
+            time.sleep(0.7)
 
-joystick_range_border = circle_border_pixels(distance_from_center, middle_x, middle_y)
+        logging.info(f"{self.WindowName} detected! Monitoring started.")
 
+        try:
+            while self.Process.is_set():
+                #if the window is in the list of running window
+                if self.Find_Window():
+                    #takes active window
+                    ActiveWindow = gw.getActiveWindow()
+                    #if there is a window active or is the same as WindowName set and the flag is set, it returns
+                    #the cursor inside the circle
+                    if ActiveWindow and ActiveWindow.title.strip() == self.WindowName and self.InGame.is_set():
+                        x, y= pyautogui.position()
+                        self.Return_Cursor_CircleEdge(x, y)
+                else:
+                    logging.info(f"{self.WindowName} closed. Exiting script.")
+                    self.Process.clear()
+                time.sleep(0.05)
+                
+
+                time.sleep(0.05)
+        except Exception as E:
+            logging.error(f"An error occurred: {E}")
+        finally:
+            logging.info("Script stopped.")
+    
+    def CircleEdge(self):
+        """
+        Returns a list of coordinates (x, y) of pixels on the edge of a circle.
+        """
+        Points = set()
+        for Deg in range(360):
+            Rad = math.radians(Deg)
+            x = round(self.Middle_X + self.DistanceCenter * math.cos(Rad))
+            y = round(self.Middle_Y + self.DistanceCenter * math.sin(Rad))
+            Points.add((x, y))
+        return sorted(Points)
+
+    def Return_Cursor_CircleEdge(self, x: int, y: int):
+        """
+        If the point (x, y) is outside the circle with center (cx, cy) and radius `radius`,
+        move the mouse to the nearest point on the edge.
+        """
+        dx = x - self.Middle_X
+        dy = y - self.Middle_Y
+        dist = math.sqrt(dx*dx + dy*dy)
+
+        # if the cursor is inside the circle, exit.
+        if dist <= self.DistanceCenter:
+            return
+
+        # if it's outside, it finds the closest coords between the cursor and the set of pixels
+        closest = min(self.EdgeCoords, key=lambda p: (p[0] - x)**2 + (p[1] - y)**2)
+        pyautogui.moveTo(closest[0], closest[1])
+
+    def Find_Window(self):
+        #if the window is present in all windows, returns true
+        return any(title.strip() == self.WindowName for title in gw.getAllTitles())
+
+    def Toggle_InGame(self):
+        #flag toggle used in keybind
+        if self.InGame.is_set():
+            self.InGame.clear()
+            return
+        self.InGame.set()
+
+        
+    def Set_Cursor_Center(self):
+        #set the cursor to the middle
+        pyautogui.moveTo(self.Middle_X, self.Middle_Y)
+        
 if __name__ == "__main__":
-
-    KB.upload_keybind_function('v', InGame_Toggle)
-    KB.upload_keybind_function('middle_m', Cancel_Skill)
-    
-    
-    logging.basicConfig(level=logging.INFO)
-    logging.info(f"Waiting for {window_name} to start...")
-
-    while not find_window():
-        time.sleep(0.7)
-
-    logging.info(f"{window_name} detected! Monitoring started.")
-
-    try:
-        while Process.is_set():
-            if find_window():
-                active_window = gw.getActiveWindow()
-                if active_window and active_window.title.strip() == window_name and InGame.is_set():
-                    x, y= pyautogui.position()
-                    clamp_to_circle(x, y, middle_x, middle_y, distance_from_center, joystick_range_border)
-            else:
-                logging.info(f"{window_name} closed. Exiting script.")
-                Process.clear()
-            time.sleep(0.05)
-            
-
-            time.sleep(0.05)
-    except Exception as e:
-        logging.error(f"An error occurred: {e}")
-    finally:
-        logging.info("Script stopped.")
+    main = Main(WindowName, DistanceCenter_Percentage_HeightBased)
+    main.start()
