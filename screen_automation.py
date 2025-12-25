@@ -9,12 +9,11 @@ import shutil
 
 class KeyNameNotFoundError(Exception):
     """Raised when a keyname is not found in either keyboard or mouse mappings"""
-    def __init__(self, keyname):
-        self.keyname = keyname
-        super().__init__(f"Keyname '{keyname}' not found in keyboard or mouse mappings")
+    def __init__(self, KeyName):
+        super().__init__(f"Keyname '{KeyName}' not found in keyboard or mouse mappings")
     
-class KeyBind_Manager:
-    _keyboard_buttons = {
+class Keybind_Manager:
+    _KeyboardButtons = {
         # Tasti speciali
         "alt": Key.alt,
         "alt_l": Key.alt_l,
@@ -111,511 +110,517 @@ class KeyBind_Manager:
     }
 
 
-    _mouse_buttons = {
+    _MouseButtons = {
         "left_m": Button.left,
         "right_m": Button.right,
         "middle_m": Button.middle
     }
     
-    def __init__(self, on_key_press = True, on_click = True, on_move = False):
-        """Set if necessary input behaviour you want to detect"""
-        #here process is a global flag within the obj to shut down every process in case of using stop()
-        self._process = threading.Event()
+    def __init__(self):
+        """run the method Run_Listeners() to start"""
+        #here process is a global flag within the obj to shut down every process in case of using Stop()
+        self._Process = threading.Event()
         #controller needed for pressing/releasing buttons
         self._Keyboard = KeyboardController()
         self._Mouse = MouseController()
         
-        #this dict is needed for saving the function worker, so it can delete itself by the obj and easy to access
+        #this dict is needed for saving the Function worker, so it can delete itself by the obj and easy to access
         self._FunctionName_FunctionWorker = {}
-        #this dict is used in upload_keybind_function(), and to check if the button press in listeners are present here, 
-        #at last it calls the function from _FunctionName_FunctionWorker
+        #this dict is used in Upload_Keybind_Function(), and to check if the button press in listeners are present here, 
+        #at last it calls the Function from _FunctionName_FunctionWorker
         self._KeyboardName_Function = {}
         self._MouseName_Function = {}
 
-        #this flag is used in case the option _multiple_instances = false, if self != none, it send a message and doesn't start the function
-        self._last_running_function = None
-        #flag used for checking if the last pressed key is the one setted inside a function
-        self._last_KeyboardKey_pressed = None
-        self._last_MouseButton_pressed = None
+        #this flag is used in case the option _MultipleInstances = false, if self != none, it send a message and doesn't start the Function
+        self._Current_Running_Function = None
+        #flag used for checking if the last pressed key is the one setted inside a Function
+        self._Last_KeyboardInput = None
+        self._Last_MouseInput = None
         
         #flag to check if listener thread is running
-        self._listener_thread = None
+        self._Listener_Thread = None
         
-        self.start(on_key_press = on_key_press, on_click = on_click, on_move = on_move)
         
-    def start(self, on_key_press = True, on_click = True, on_move = False):
+    def Run_Listeners(self, KeyboardInput = True, MouseInput = True, MouseMovement = False):
+        """it start the listeners of which will detect various input depending on the flags set
+
+        Args:
+            KeyboardInput (bool, optional): detect keyboard input. Defaults to True.
+            MouseInput (bool, optional): detect mouse input. Defaults to True.
+            MouseMovement (bool, optional): detect mouse movement. Defaults to False.
+        """
         #listener thread meaning is to read all mouse/keyboard input
-        if self._listener_thread and self._listener_thread.is_alive():
-            self._process.clear()
-            self._listener_thread.join()
-        #set the process true, enable all function to run
-        self._process.set()
+        if self._Listener_Thread and self._Listener_Thread.is_alive():
+            self._Process.clear()
+            self._Listener_Thread.join()
+        #set the process true, enable all Function to run
+        self._Process.set()
         # Initialize keyboard and mouse button mappings
-        self._keyboard_listener = KeyboardListener(
-            on_press=self._on_key_press if on_key_press else None
+        self._KeyboardListener = KeyboardListener(
+            on_press=self._On_KeyboardInput if KeyboardInput else None
         )
         
-        self._mouse_listener = MouseListener(
-            on_click=self._on_click if on_click else None,
-            on_move=self._on_move if on_move else None
+        self._MouseListener = MouseListener(
+            on_click=self._On_MouseInput if MouseInput else None,
+            on_move=self._On_MouseMovement if MouseMovement else None
         )
 
         # Start listeners in a separate thread
-        self._listener_thread = threading.Thread(target=self._run_listeners, daemon=True)
-        self._listener_thread.start()
+        self._Listener_Thread = threading.Thread(target=self._Wrapper_Run_Listeners, daemon=True)
+        self._Listener_Thread.start()
 
-    def _run_listeners(self):
+    def _Wrapper_Run_Listeners(self):
         """Run the listeners in a separate thread"""
-        if self._keyboard_listener:
-            self._keyboard_listener.start()
-        if self._mouse_listener:
-            self._mouse_listener.start()
+        if self._KeyboardListener:
+            self._KeyboardListener.start()
+        if self._MouseListener:
+            self._MouseListener.start()
         
         # Keep the thread alive and monitor for process state
-        while self._process.is_set():
+        while self._Process.is_set():
             time.sleep(0.05)
 
-    def _on_key_press(self, key_obj):
+    def _On_KeyboardInput(self, KeyObject):
         """Detect keyboard press"""
         #if the process isn't set, it doesn't start
-        if not self._process.is_set():
+        if not self._Process.is_set():
             return None
         try:
-            if hasattr(key_obj, 'char'):
-                key_name = key_obj.char.lower()
+            if hasattr(KeyObject, 'char') and KeyObject.char is not None:
+                KeyName = KeyObject.char.lower()
             else:
-                key_name = str(key_obj).replace('Key.', '').lower()
+                KeyName = str(KeyObject).replace('Key.', '').lower()
                 
-            self._last_KeyboardKey_pressed = key_name
-            #checks if the key_name is associated into any function
-            if key_name in self._KeyboardName_Function:
-                function = self._KeyboardName_Function[key_name]
-                #uses the function name as key for getting the worker, you have to be case sensitive if you want to access the function later
-                if function.__name__ in self._FunctionName_FunctionWorker.keys():
-                    func_worker = self._FunctionName_FunctionWorker[function.__name__]
-                    func_worker.start_function()
-                    print(f"Key pressed: {key_name}")
+            self._Last_KeyboardInput = KeyName
+            #checks if the KeyName is associated into any Function
+            if KeyName in self._KeyboardName_Function:
+                Function = self._KeyboardName_Function[KeyName]
+                #uses the Function name as key for getting the worker, you have to be case sensitive if you want to access the Function later
+                if Function.__name__ in self._FunctionName_FunctionWorker.keys():
+                    FunctionWorker = self._FunctionName_FunctionWorker[Function.__name__]
+                    FunctionWorker.Start()
+                    print(f"Key pressed: {KeyName}")
                 
         except AttributeError:
-            print(f"Special key pressed: {key_obj}")
+            print(f"Special key pressed: {KeyObject}")
 
-    def _on_click(self, x, y, button_obj, pressed):
-        #same principle as _on_key_press
+    def _On_MouseInput(self, x, y, KeyObject, Pressed):
+        #same principle as _On_KeyboardInput
         """Detect mouse click"""
-        if not self._process.is_set():
+        if not self._Process.is_set():
             return None
         
-        if pressed:
+        if Pressed:
             # Convert Button.left to "left_m", Button.right to "right_m", etc.
-            button_name = (str(button_obj).replace('Button.', '') + '_m').lower()
-            self._last_MouseButton_pressed = button_name
+            KeyName = (str(KeyObject).replace('Button.', '') + '_m').lower()
+            self._Last_MouseInput = KeyName
             
             
-            if button_name in self._MouseName_Function:
-                function = self._MouseName_Function[button_name]
-                if function.__name__ in self._FunctionName_FunctionWorker.keys():
-                    func_worker = self._FunctionName_FunctionWorker[function.__name__]
-                    func_worker.start_function()
-                    print(f"Button pressed: {button_name}")
+            if KeyName in self._MouseName_Function:
+                Function = self._MouseName_Function[KeyName]
+                if Function.__name__ in self._FunctionName_FunctionWorker.keys():
+                    FunctionWorker = self._FunctionName_FunctionWorker[Function.__name__]
+                    FunctionWorker.Start()
+                    print(f"Button pressed: {KeyName}")
 
-    def _on_move(self, x, y):
+    def _On_MouseMovement(self, x, y):
         """Detect mouse movement"""
-        if not self._process.is_set():
+        if not self._Process.is_set():
             return False
         print(f"Mouse moved to ({x}, {y})")
     
-    def upload_keybind_function(self, button_name, function, *args, multiple_instances = True, togglable=False, loop_delay=0.05):
-        button_name = button_name.lower()
+    def Upload_Keybind_Function(self, KeyName, Function, *Args, MultipleInstances = True, Toggable=False, LoopDelay=0.05):
+        KeyName = KeyName.lower()
         #checks if the button it's either a mouse or keyboard one.
-        if button_name in self._keyboard_buttons.keys():
-            self._KeyboardName_Function[button_name] = function
-        elif button_name in self._mouse_buttons.keys():
-            self._MouseName_Function[button_name] = function
+        if KeyName in self._KeyboardButtons.keys():
+            self._KeyboardName_Function[KeyName] = Function
+        elif KeyName in self._MouseButtons.keys():
+            self._MouseName_Function[KeyName] = Function
         else:
-            raise KeyNameNotFoundError(button_name)
+            raise KeyNameNotFoundError(KeyName)
         
         #add key value into the dict
-        self._FunctionName_FunctionWorker[function.__name__] = Function_Worker(self, function, *args, multiple_instances=multiple_instances, togglable=togglable, loop_delay=loop_delay)
+        self._FunctionName_FunctionWorker[Function.__name__] = Function_Worker(self, Function, *Args, MultipleInstances=MultipleInstances, Toggable=Toggable, LoopDelay=LoopDelay)
         
-    def button_click(self, button_name, delay = 0.1):
-        button_name = button_name.lower()
+    def ButtonClick(self, Key, delay = 0.1):
+        Key = Key.lower()
         """Simulate a button click"""
-        if not self._process.is_set():
+        if not self._Process.is_set():
             return None
-        if button_name in self._mouse_buttons:
+        if Key in self._MouseButtons:
             time.sleep(delay)
-            self._Mouse.click(self._mouse_buttons[button_name])
-        elif button_name in self._keyboard_buttons:
+            self._Mouse.click(self._MouseButtons[Key])
+        elif Key in self._KeyboardButtons:
             time.sleep(delay)
-            self._Keyboard.press(self._keyboard_buttons[button_name])
+            self._Keyboard.press(self._KeyboardButtons[Key])
             time.sleep(delay)
-            self._Keyboard.release(self._keyboard_buttons[button_name])
+            self._Keyboard.release(self._KeyboardButtons[Key])
         else:
-            raise KeyNameNotFoundError(button_name)
+            raise KeyNameNotFoundError(Key)
         
-    def show_mouse_buttons_name(self):
+    def Show_MouseButtons(self):
         """Print all available mouse button names"""
-        print(self._mouse_buttons.keys())
+        print(self._MouseButtons.keys())
     
-    def show_Keyboard_buttons_name(self):
+    def Show_KeyboardButtons(self):
         """Print all available keyboard key names"""
-        print(self._keyboard_buttons.keys())
+        print(self._KeyboardButtons.keys())
         
-    def press_MouseButton(self, button_name, delay = 0.1):
-        button_name = button_name.lower()
+    def Press_MouseButton(self, Key, delay = 0.1):
+        Key = Key.lower()
         """Press and release a mouse button"""
-        if not self._process.is_set():
+        if not self._Process.is_set():
             return None
-        if button_name not in self._mouse_buttons:
-            raise KeyNameNotFoundError(button_name)
+        if Key not in self._MouseButtons:
+            raise KeyNameNotFoundError(Key)
         
-        self._Mouse.press(self._mouse_buttons[button_name])
+        self._Mouse.press(self._MouseButtons[Key])
         time.sleep(delay)
-        self._Mouse.release(self._mouse_buttons[button_name])
+        self._Mouse.release(self._MouseButtons[Key])
     
-    def press_KeyboardKey(self, key_name, delay = 0.1):
-        key_name = key_name.lower()
+    def Press_KeyboardButton(self, KeyName, Delay = 0.1):
+        KeyName = KeyName.lower()
         """Press and release a keyboard key"""
-        if not self._process.is_set():
+        if not self._Process.is_set():
             return None
-        if key_name not in self._keyboard_buttons:
-            raise KeyNameNotFoundError(key_name)
+        if KeyName not in self._KeyboardButtons:
+            raise KeyNameNotFoundError(KeyName)
         
-        self._Keyboard.press(self._keyboard_buttons[key_name])
-        time.sleep(delay)
-        self._Keyboard.release(self._keyboard_buttons[key_name])
+        self._Keyboard.press(self._KeyboardButtons[KeyName])
+        time.sleep(Delay)
+        self._Keyboard.release(self._KeyboardButtons[KeyName])
        
-    def stop(self):
+    def Stop(self):
         """Stop the automation and listeners"""
-        self._process.clear()
-        self._last_running_function = None
-        if self._keyboard_listener:
-            self._keyboard_listener.stop()
-        if self._mouse_listener:
-            self._mouse_listener.stop()
+        self._Process.clear()
+        self._Current_Running_Function = None
+        if self._KeyboardListener:
+            self._KeyboardListener.Stop()
+        if self._MouseListener:
+            self._MouseListener.Stop()
         # Wait for listener thread to finish
-        if hasattr(self, '_listener_thread') and self._listener_thread.is_alive():
-            self._listener_thread.join(timeout=5.0)
+        if hasattr(self, '_Listener_Thread') and self._Listener_Thread.is_alive():
+            self._Listener_Thread.join(timeout=5.0)
                 
             
 class Function_Worker():
-    def __init__(self, keybind_manager, function, *args, multiple_instances = True, togglable=False, loop_delay=0.05):
-        """Worker with multiple tools and option used inside KeyBind_Manager
+    def __init__(self, Keybind_Manager, Function, *Args, MultipleInstances = True, Toggable=False, LoopDelay=0.05):
+        """Worker with multiple tools and option used inside Keybind_Manager
 
         Args:
-            keybind_manager (obj): keybind_manager used in global case needed
-            function (function): function
-            multiple_instances (bool, optional): set false if you want this thread to be the only one running, \
+            Keybind_Manager (obj): Keybind_Manager used in global case needed
+            Function (Function): Function
+            MultipleInstances (bool, optional): set false if you want this thread to be the only one running, \
             if there are more, it doesn't start. Defaults to True.
-            togglable (bool, optional): set true if you want the thread to be in loop, starting the function again \
-            will stop it. Defaults to False.
-            loop_delay (float, optional): Set delay between the function looping, togglable needs to be set true \
+            Toggable (bool, optional): set true if you want the thread to be in loop, starting the Function again \
+            will Stop it. Defaults to False.
+            LoopDelay (float, optional): Set delay between the Function looping, Toggable needs to be set true \
             for this to impact the code. Defaults to 0.05.
         """
-        self._keybind_manager = keybind_manager
-        self._function = function
-        self._args = args
-        self._multiple_instances = multiple_instances
-        self._toggled = None
-        self.loop_delay = loop_delay
-        self._thread = None
-        self._process = threading.Event()
-        if togglable:
-            self._toggled = False
+        self._Keybind_Manager = Keybind_Manager
+        self._Function = Function
+        self._Args = Args
+        self._MultipleInstances = MultipleInstances
+        self._Toggled = None
+        self.LoopDelay = LoopDelay
+        self._Thread = None
+        self._Process = threading.Event()
+        if Toggable:
+            self._Toggled = False
  
            
-    def start_function(self):
-        #checks if _toggled is a bool, hence togglable set to true
-        if isinstance(self._toggled, bool):
-            self._process.set()
-            #switch used for toogle _toggled between true and false
-            self._toggled = not self._toggled
-            #if _toggled is set to false, if the thread is alive, it clear(set false) the process, 
-            #and waits the thread to finish, at the end it always exit the function
-            if not self._toggled:
-                if self._thread and self._thread.is_alive():
-                    self._process.clear()
-                    self._thread.join()
-                    self._process.set()
+    def Start(self):
+        #checks if _Toggled is a bool, hence Toggable set to true
+        if isinstance(self._Toggled, bool):
+            self._Process.set()
+            #switch used for toogle _Toggled between true and false
+            self._Toggled = not self._Toggled
+            #if _Toggled is set to false, if the thread is alive, it clear(set false) the process, 
+            #and waits the thread to finish, at the end it always exit the Function
+            if not self._Toggled:
+                if self._Thread and self._Thread.is_alive():
+                    self._Process.clear()
+                    self._Thread.join()
+                    self._Process.set()
                 return
-            #here if the function should start, if _multiple_instances == false and another function is running, 
-            #it just switch again, resetting and exit the function
-            if not self._multiple_instances and self._keybind_manager._last_running_function != self._function.__name__:
-                self._toggled = not self._toggled
+            #here if the Function should start, if _MultipleInstances == false and another Function is running, 
+            #it just switch again, resetting and exit the Function
+            if not self._MultipleInstances and self._Keybind_Manager._Current_Running_Function != self._Function.__name__:
+                self._Toggled = not self._Toggled
                 return
             #thread with specific toggle wrapper started
-            self._thread = threading.Thread(target=self._toggle_wrapper, daemon=True)
-            self._thread.start()
+            self._Thread = threading.Thread(target=self._Wrapper_ToggleCase, daemon=True)
+            self._Thread.start()
         else:
-            #(case if toggable was false) same check for running function as before
-            if not self._multiple_instances and self._keybind_manager._last_running_function != self._function.__name__:
-                print(f"Function: {self._keybind_manager._last_running_function} is already running. Can only run one function at time\n")
+            #(case if toggable was false) same check for running Function as before
+            if not self._MultipleInstances and self._Keybind_Manager._Current_Running_Function != self._Function.__name__:
+                print(f"Function: {self._Keybind_Manager._Current_Running_Function} is already running. Can only run one Function at time\n")
                 return
-            #check if the thread is still alive and exit the function
-            elif self._thread and self._thread.is_alive():
-                print("The function is already running, stop it or change it's behavior")
+            #check if the thread is still alive and exit the Function
+            elif self._Thread and self._Thread.is_alive():
+                print("The Function is already running, Stop it or change it's behavior")
                 return
             #thread started with normal wrapper (non toggable)
-            self._thread = threading.Thread(target=self._wrapper, daemon=True)
-            self._thread.start()
+            self._Thread = threading.Thread(target=self._Wrapper_Non_ToggleCase, daemon=True)
+            self._Thread.start()
     
-    def _toggle_wrapper(self):
-        """Run the function in a loop when toggled"""
-        #set the last running function as itself
-        self._keybind_manager._last_running_function = self._function.__name__
-        #loop with function
-        while self._process.is_set():
-            self._function(*self._args)
-            time.sleep(self.loop_delay)
-        #IMPORTANT for _multiple_instances to work, if the loop stops, 
-        #if the last function is still itself, it changes the _last_running_function to none, 
-        #stating that no other function is running
-        if self._keybind_manager._last_running_function == self._function.__name__:
-           self._keybind_manager._last_running_function = None
+    def _Wrapper_ToggleCase(self):
+        """Run the Function in a loop when toggled"""
+        #set the last running Function as itself
+        self._Keybind_Manager._Current_Running_Function = self._Function.__name__
+        #loop with Function
+        while self._Process.is_set():
+            self._Function(*self._Args)
+            time.sleep(self.LoopDelay)
+        #IMPORTANT for _MultipleInstances to work, if the loop Stops, 
+        #if the last Function is still itself, it changes the _Current_Running_Function to none, 
+        #stating that no other Function is running
+        if self._Keybind_Manager._Current_Running_Function == self._Function.__name__:
+           self._Keybind_Manager._Current_Running_Function = None
                                    
-    def _wrapper(self):
+    def _Wrapper_Non_ToggleCase(self):
         #same concept as the toggable wrapper, without the loop
-        self._keybind_manager._last_running_function = self._function.__name__
-        self._function(*self._args)
-        if self._keybind_manager._last_running_function == self._function.__name__:
-           self._keybind_manager._last_running_function = None
+        self._Keybind_Manager._Current_Running_Function = self._Function.__name__
+        self._Function(*self._Args)
+        if self._Keybind_Manager._Current_Running_Function == self._Function.__name__:
+           self._Keybind_Manager._Current_Running_Function = None
             
-    def stop(self,):
+    def Stop(self):
         #clears(set false) the process
-        self._process.clear()
+        self._Process.clear()
     
-    def delete(self):
+    def Delete(self):
         #IMPORTANT in order for this to work, no other refence should exist outside the dict
         #thats why you have so create the object inside the dict and can't do it inside the obj itself
-        del self._keybind_manager._FunctionName_FunctionWorker[self._function.__name__]
+        del self._Keybind_Manager._FunctionName_FunctionWorker[self._Function.__name__]
     
         
             
 class Screenshots_Regions():
-    def __init__(self, screenshot_path, coords_path):
-        """Obj with multiple tools for screenshots with regions, you can change the paths anytime when needed.
+    def __init__(self, ScreenshotPath, CoordsPath):
+        """Obj with multiple tools for screenshots with Regions, you can change the paths anytime when needed.
 
         Args:
-            screenshot_path (str): folder path used in save_image_region() and ..._cursor(), for saving the image file (.png) with same name as coord file
-            coords_path (str): folder path ..... for saving the region file (.txt) with same name as image file
+            ScreenshotPath (str): folder path used in save_image_Region() and ..._cursor(), for saving the image file (.png) with same name as coord file
+            CoordsPath (str): folder path ..... for saving the Region file (.txt) with same name as image file
         """
-        self._process = threading.Event()
-        self._process.set()
-        self.screenshot_path = screenshot_path
-        self.coords_path = coords_path
+        self._Process = threading.Event()
+        self._Process.set()
+        self.ScreenshotPath = ScreenshotPath
+        self.CoordsPath = CoordsPath
     
-    def locate_image_with_region(self, path_image, region = (0, 0, 1920, 1080), confidence = 0.8):
-        """Locate the given image with given screen region
+    def Locate_Image_StaticRegion(self, ImagePath, Region = (0, 0, 1920, 1080), Confidence = 0.8):
+        """Locate the given image with given screen Region
 
         Args:
-            path_image (str): path of the image
-            region (tuple, optional): Box(tuple) with the following coords, left, top, width, height. Defaults to (0, 0, 1920, 1080).
-            confidence (float, optional): Set the precision of the image required, value between 0-1. Defaults to 0.8.
+            ImagePath (str): path of the image
+            Region (tuple, optional): Box(tuple) with the following coords, left, top, width, height. Defaults to (0, 0, 1920, 1080).
+            Confidence (float, optional): Set the precision of the image required, value between 0-1. Defaults to 0.8.
 
         Returns:
-            tuple: specific region at which the image was found
+            tuple: specific Region at which the image was found
         """
-        if not self._process.is_set():
+        if not self._Process.is_set():
             return None
         
         #checks if the path exist
-        if not os.path.exists(path_image):
-            print(f"Image file not found: {path_image}")
+        if not os.path.exists(ImagePath):
+            print(f"Image file not found: {ImagePath}")
             return None
             
         try:
-            #takes screenshot with the region
-            zone_check = pyautogui.screenshot(region=region)
+            #takes screenshot with the Region
+            Screenshot = pyautogui.screenshot(Region=Region)
             #locates the image
-            image_location = pyautogui.locate(path_image, zone_check, confidence=confidence)
+            ImageLocation = pyautogui.locate(ImagePath, Screenshot, Confidence=Confidence)
             #if found
-            if image_location:
+            if ImageLocation:
                 # Convert relative coordinates to absolute screen coordinates
-                absolute_location = (
-                    int(image_location.left + region[0]),  # Add region's left offset
-                    int(image_location.top + region[1]),   # Add region's top offset
-                    image_location.width,
-                    image_location.height
+                AbsoluteLocation = (
+                    int(ImageLocation.left + Region[0]),  # Add Region's left offset
+                    int(ImageLocation.top + Region[1]),   # Add Region's top offset
+                    ImageLocation.width,
+                    ImageLocation.height
                 )
-                print(f"Image found at: {absolute_location}")
-                return absolute_location
+                print(f"Image found at: {AbsoluteLocation}")
+                return AbsoluteLocation
             return None
             
         except Exception as e:
             print(f"Error locating image: {str(e)}")
             return None
     
-    def save_image_region(self, keybind_manager, region, capture_key = 'space', exit_key = 'esc'):
-        """Save both the image and region in the respected folder set when created the obj, \
-            these file have the same name, so it can be used with locate_image_with_name().
+    def Save_Image_Region_Files(self, Keybind_Manager, Region, CaptureKey = 'space', ExitKey = 'esc'):
+        """Save both the image and Region in the respected folder set when created the obj, \
+            these file have the same name, so it can be used with Locate_Image_With_Name().
 
         Args:
-            keybind_manager (obj): keyboard_manager used in global file needed for catching the keybind
-            region (tuple, optional): Box(tuple) with the following coords, left, top, width, height. Defaults to (0, 0, 1920, 1080).
-            capture_key (str, optional): keybind to capture the image within the region set. Defaults to 'space'.
-            exit_key (str, optional): To exit the function. Defaults to 'esc'.
+            Keybind_Manager (obj): keyboard_manager used in global file needed for catching the keybind
+            Region (tuple, optional): Box(tuple) with the following coords, left, top, width, height. Defaults to (0, 0, 1920, 1080).
+            CaptureKey (str, optional): keybind to capture the image within the Region set. Defaults to 'space'.
+            ExitKey (str, optional): To exit the Function. Defaults to 'esc'.
         """
-        capture_key = capture_key.lower()
-        exit_key = exit_key.lower()
+        CaptureKey = CaptureKey.lower()
+        ExitKey = ExitKey.lower()
         
         #uploading the exit keybind
-        keybind_manager.upload_keybind_function(exit_key, self.stop, togglable=False)
+        Keybind_Manager.Upload_Keybind_Function(ExitKey, self.Stop, Toggable=False)
         
-        while self._process.is_set():
-            print(f'Press {exit_key.upper()} to exit the loop...')
-            print(f"Press {capture_key.upper()} to capture...")
+        while self._Process.is_set():
+            print(f'Press {ExitKey.upper()} to exit the loop...')
+            print(f"Press {CaptureKey.upper()} to capture...")
             
-            #taking the single value of the region(box)
-            left = region[0]
-            top = region[1]
-            width = region[2]
-            height = region[3]
+            #taking the single value of the Region(box)
+            Left = Region[0]
+            Top = Region[1]
+            Width = Region[2]
+            Height = Region[3]
             
             #loops until the capture key has been pressed
-            while self._process.is_set():
-                if keybind_manager._last_KeyboardKey_pressed == capture_key:
-                    keybind_manager._last_KeyboardKey_pressed = None
+            while self._Process.is_set():
+                if Keybind_Manager._Last_KeyboardInput == CaptureKey:
+                    Keybind_Manager._Last_KeyboardInput = None
                     time.sleep(0.5)
                     break
                 time.sleep(0.05)
                 
             #makes the screenshot
-            screenshot = pyautogui.screenshot(region=(left, top, width, height))
+            Screenshot = pyautogui.screenshot(Region=(Left, Top, Width, Height))
             
             #set the name for both files
             print("Insert screenshot name:")
-            base_filename = input()
+            Base_FileName = input()
     
-            screenshot_filename = base_filename + ".png"
+            Screenshot_FileName = Base_FileName + ".png"
             # Save the screenshot
-            screenshot.save(screenshot_filename)
+            Screenshot.save(Screenshot_FileName)
             
             # Save coordinates to text file
-            region_filename = f"{base_filename}.txt"
-            with open(region_filename, 'w') as f:
-                f.write(f"{left}, {top}, {width}, {height}")
+            Region_filename = f"{Base_FileName}.txt"
+            with open(Region_filename, 'w') as f:
+                f.write(f"{Left}, {Top}, {Width}, {Height}")
 
             # Create directories if they don't exist
-            os.makedirs(self.screenshot_path, exist_ok=True)
-            os.makedirs(self.coords_path, exist_ok=True)
+            os.makedirs(self.ScreenshotPath, exist_ok=True)
+            os.makedirs(self.CoordsPath, exist_ok=True)
 
             #moves the file into the folders
-            shutil.move(screenshot_filename, self.screenshot_path)
-            shutil.move(region_filename, self.coords_path)
+            shutil.move(Screenshot_FileName, self.ScreenshotPath)
+            shutil.move(Region_filename, self.CoordsPath)
             
-            print(f"\nScreenshot saved as: {screenshot_filename}")
-            print(f"Coordinates saved as: {region_filename}")
+            print(f"\nScreenshot saved as: {Screenshot_FileName}")
+            print(f"Coordinates saved as: {Region_filename}")
             
         
-    def save_image_region_cursor(self, keybind_manager, capture_key = 'space', exit_key = 'esc'):
-        """Save both the image and region in the respected folder set when created the obj, \
-            these file have the same name, so it can be used with locate_image_with_name(). \
-            First you capture the top left, then the bottom right of the region with the capture key.
+    def Save_Image_Region_Files_CursorPosition(self, Keybind_Manager, CaptureKey = 'space', ExitKey = 'esc'):
+        """Save both the image and Region in the respected folder set when created the obj, \
+            these file have the same name, so it can be used with Locate_Image_With_Name(). \
+            First you capture the top left, then the bottom right of the Region with the capture key.
 
         Args:
-            keybind_manager (obj): keyboard_manager used in global file needed for catching the keybind
-            capture_key (str, optional): keybind to capture first the top left, then the top right \
-            region. Defaults to 'space'.
-            exit_key (str, optional): To exit the function. Defaults to 'esc'.
+            Keybind_Manager (obj): keyboard_manager used in global file needed for catching the keybind
+            CaptureKey (str, optional): keybind to capture first the top left, then the top right \
+            Region. Defaults to 'space'.
+            ExitKey (str, optional): To exit the Function. Defaults to 'esc'.
         """
-        capture_key = capture_key.lower()
-        exit_key = exit_key.lower()
+        CaptureKey = CaptureKey.lower()
+        ExitKey = ExitKey.lower()
         
-        self._process.set()
+        self._Process.set()
         
-        keybind_manager.upload_keybind_function(exit_key, self.stop, togglable=True)
+        Keybind_Manager.Upload_Keybind_Function(ExitKey, self.Stop, Toggable=True)
         
-        while self._process.is_set():
-            print(f'Press {exit_key.upper()} to exit the loop...')
-            print(f"Move your mouse to the desired position and press {capture_key.upper()} to capture...")
+        while self._Process.is_set():
+            print(f'Press {ExitKey.upper()} to exit the loop...')
+            print(f"Move your mouse to the desired position and press {CaptureKey.upper()} to capture...")
 
             #capture top left
-            while self._process.is_set():
-                if keybind_manager._last_KeyboardKey_pressed == capture_key:
-                    left, top = pyautogui.position()
-                    print(f"Top-left position captured: ({left}, {top})")
-                    keybind_manager._last_KeyboardKey_pressed = None
+            while self._Process.is_set():
+                if Keybind_Manager._Last_KeyboardInput == CaptureKey:
+                    Left, Top = pyautogui.position()
+                    print(f"Top-Left position captured: ({Left}, {Top})")
+                    Keybind_Manager._Last_KeyboardInput = None
                     time.sleep(0.5)
                     break
                 time.sleep(0.05)
             #capture bottom right
-            while self._process.is_set():
-                if keybind_manager._last_KeyboardKey_pressed == capture_key:
-                    right, bottom = pyautogui.position()
-                    print(f"Right-Bottom position captured: ({right}, {bottom})")
-                    keybind_manager._last_KeyboardKey_pressed = None
+            while self._Process.is_set():
+                if Keybind_Manager._Last_KeyboardInput == CaptureKey:
+                    Right, Bottom = pyautogui.position()
+                    print(f"Right-Bottom position captured: ({Right}, {Bottom})")
+                    Keybind_Manager._Last_KeyboardInput = None
                     time.sleep(0.5)
                     break
                 time.sleep(0.05)
     
-            if not self._process.is_set():
+            if not self._Process.is_set():
                 break
             
             #calculatet the width and height
-            width = right - left
-            height = bottom - top
+            Width = Right - Left
+            Height = Bottom - Top
             
             #if the coords saved didn't follow the top left bottom right procedures, it fails and start over
-            if width <= 0 or height <= 0:
-                print("Invalid region size. Please try again.")
+            if Width <= 0 or Height <= 0:
+                print("Invalid Region size. Please try again.")
                 continue
             
 
             
-            screenshot = pyautogui.screenshot(region=(left, top, width, height))
+            Screenshot = pyautogui.screenshot(Region=(Left, Top, Width, Height))
             
-            #same concept as save_image_region()
+            #same concept as save_image_Region()
             print("Insert screenshot name:")
-            base_filename = input()
-            keybind_manager._last_KeyboardKey_pressed = None
+            Base_FileName = input()
+            Keybind_Manager._Last_KeyboardInput = None
     
-            screenshot_filename = base_filename + ".png"
+            Screenshot_FileName = Base_FileName + ".png"
             # Save the screenshot
-            screenshot.save(screenshot_filename)
+            Screenshot.save(Screenshot_FileName)
             
             # Save coordinates to text file
-            region_filename = f"{base_filename}.txt"
-            with open(region_filename, 'w') as f:
-                f.write(f"{left}, {top}, {width}, {height}")
+            Region_filename = f"{Base_FileName}.txt"
+            with open(Region_filename, 'w') as f:
+                f.write(f"{Left}, {Top}, {Width}, {Height}")
 
             # Create directories if they don't exist
-            os.makedirs(self.screenshot_path, exist_ok=True)
-            os.makedirs(self.coords_path, exist_ok=True)
+            os.makedirs(self.ScreenshotPath, exist_ok=True)
+            os.makedirs(self.CoordsPath, exist_ok=True)
 
-            shutil.move(screenshot_filename, self.screenshot_path)
-            shutil.move(region_filename, self.coords_path)
+            shutil.move(Screenshot_FileName, self.ScreenshotPath)
+            shutil.move(Region_filename, self.CoordsPath)
             
-            print(f"\nScreenshot saved as: {screenshot_filename}")
-            print(f"Coordinates saved as: {region_filename}")
+            print(f"\nScreenshot saved as: {Screenshot_FileName}")
+            print(f"Coordinates saved as: {Region_filename}")
         
                   
-    def locate_image_with_name(self, file_name, confidence = 0.9):
-        """Locate the image, using the same file_name for both image and coords.
+    def Locate_Image_With_Name(self, FileName, Confidence = 0.9):
+        """Locate the image, using the same FileName for both image and coords.
 
         Args:
-            file_name (str): name of both image and coords saved in the folders path setted during the creation of the obj itself
-            confidence (float, optional): Set the precision of the image required, value between 0-1. Defaults to 0.9.
+            FileName (str): name of both image and coords saved in the folders path setted during the creation of the obj itself
+            Confidence (float, optional): Set the precision of the image required, value between 0-1. Defaults to 0.9.
 
         Returns:
-            method: locate_image_with_region() using both images and coords
+            method: Locate_Image_StaticRegion() using both images and coords
         """
         try:
-            with open(rf'{self.coords_path}\{file_name}.txt', 'r') as file:
-                content = file.read()
-                region_str = content.strip().split(',')
-                region = tuple(int(n.strip()) for n in region_str)
+            with open(rf'{self.CoordsPath}\{FileName}.txt', 'r') as File:
+                Content = File.read()
+                Region_str = Content.strip().split(',')
+                Region = tuple(int(n.strip()) for n in Region_str)
             
-            return self.locate_image_with_region(
-                rf'{self.screenshot_path}\{file_name}.png',
-                region=region,
-                confidence=confidence
+            return self.Locate_Image_StaticRegion(
+                rf'{self.ScreenshotPath}\{FileName}.png',
+                Region=Region,
+                Confidence=Confidence
             )
         except FileNotFoundError:
-            print(f"Could not find region file for {file_name}")
+            print(f"Could not find Region file for {FileName}")
             return None
         except ValueError:
-            print(f"Invalid region data in file for {file_name}")
+            print(f"Invalid Region data in file for {FileName}")
             return None
     
-    def stop(self):
-        self._process.clear()
+    def Stop(self):
+        self._Process.clear()
